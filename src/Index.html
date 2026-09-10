@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+  <?!= include('Styles'); ?>
+</head>
+<body>
+
+  <header class="hero">
+    <button type="button" class="theme-toggle" id="theme-toggle" aria-label="Cambiar a tema oscuro">
+      <svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
+        <circle cx="12" cy="12" r="4"></circle>
+        <path d="M12 2.5v2.4M12 19.1v2.4M4.2 4.2l1.7 1.7M18.1 18.1l1.7 1.7M2.5 12h2.4M19.1 12h2.4M4.2 19.8l1.7-1.7M18.1 5.9l1.7-1.7"></path>
+      </svg>
+      <svg class="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M20.5 13.4A8.5 8.5 0 1 1 10.6 3.5a6.6 6.6 0 0 0 9.9 9.9Z"></path>
+      </svg>
+    </button>
+    <div class="hero__inner">
+      <div class="hero__logo-plate">
+        <img class="hero__logo" src="<?!= include('Logo'); ?>" alt="Frozz Colombia">
+      </div>
+      <h1 class="hero__title">Crea tu solicitud de diseño</h1>
+    </div>
+  </header>
+
+  <div class="page">
+
+    <nav class="tabs" role="tablist">
+      <button class="tab" role="tab" data-view="nuevo" aria-selected="true">Nueva solicitud</button>
+      <button class="tab" role="tab" data-view="consultar" aria-selected="false">Consultar estado</button>
+    </nav>
+
+    <!-- Vista: nueva solicitud -->
+    <section class="view is-active" data-view="nuevo">
+      <div class="card card--form">
+        <p class="card__lead">Cuéntanos qué necesitas</p>
+        <p class="card__hint">Completa estos datos y te damos un número de ticket para consultar el avance cuando quieras.</p>
+
+        <form id="form-nuevo" novalidate>
+          <fieldset class="group">
+            <legend>Solicitante</legend>
+
+            <div class="field">
+              <label for="solicitanteId">¿Quién solicita?</label>
+              <select id="solicitanteId" name="solicitanteId" disabled>
+                <option value="" selected>Cargando empleados…</option>
+              </select>
+            </div>
+
+            <div class="field" id="campoCorreoManual" hidden>
+              <label for="correoManual">Correo del solicitante</label>
+              <input type="email" id="correoManual" name="correoManual" autocomplete="email" placeholder="nombre@empresa.com">
+              <p class="field__note">Este empleado no tiene correo corporativo registrado. Lo usaremos para enviarte la confirmación.</p>
+            </div>
+          </fieldset>
+
+          <fieldset class="group">
+            <legend>Detalles de la solicitud</legend>
+
+            <div class="field">
+              <label for="clienteInput">Cliente</label>
+              <div class="combo" id="clienteCombo">
+                <input type="text" id="clienteInput" autocomplete="off" placeholder="Cargando clientes…" disabled>
+                <input type="hidden" id="clienteId" name="clienteId">
+                <div class="combo__list" id="clienteLista" hidden></div>
+              </div>
+            </div>
+
+            <div class="field">
+              <label for="nombreProyecto">Nombre del proyecto</label>
+              <input type="text" id="nombreProyecto" name="nombreProyecto" autocomplete="off" placeholder="Ej. Vitrina refrigerada local Chapinero">
+            </div>
+
+            <div class="field">
+              <label for="tipo">Tipo de solicitud</label>
+              <select id="tipo" name="tipo">
+                <option value="" disabled selected>Selecciona una opción</option>
+                <option value="Solicitud sencilla">Sencilla — 1 a 3 días hábiles</option>
+                <option value="Solicitud de complejidad media">Complejidad media — 3 a 5 días hábiles</option>
+                <option value="Solicitud compleja">Compleja — hasta 7 días hábiles</option>
+              </select>
+            </div>
+
+            <div class="field">
+              <label for="clasificacion">Clasificación</label>
+              <select id="clasificacion" name="clasificacion">
+                <option value="" disabled selected>Selecciona una opción</option>
+                <option value="Diseño comercial">Diseño comercial</option>
+                <option value="Diseño ing de detalle">Diseño ing de detalle</option>
+              </select>
+            </div>
+
+            <div class="field" id="campoOrdenTrabajo" hidden>
+              <label for="ordenTrabajo">Orden de trabajo</label>
+              <select id="ordenTrabajo" name="ordenTrabajo" disabled>
+                <option value="" selected>Selecciona un cliente primero</option>
+              </select>
+            </div>
+
+            <div class="field">
+              <label for="fechaLimite">Fecha límite de entrega</label>
+              <input type="date" id="fechaLimite" name="fechaLimite">
+            </div>
+
+            <div class="field">
+              <label for="descripcion">Descripción de la solicitud</label>
+              <textarea id="descripcion" name="descripcion" placeholder="Cuéntanos qué necesitas: medidas, materiales, referencias..."></textarea>
+            </div>
+          </fieldset>
+
+          <fieldset class="group">
+            <legend>Documentos de soporte</legend>
+
+            <div class="field">
+              <label>Adjuntar archivos (opcional)</label>
+              <div class="file-upload">
+                <input type="file" id="adjuntos" name="adjuntos" multiple class="file-upload__input">
+                <label for="adjuntos" class="file-upload__btn">
+                  <svg class="file-upload__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M12 3v12m0 0l-4-4m4 4l4-4"></path>
+                    <path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"></path>
+                  </svg>
+                  Elegir archivos
+                </label>
+                <span class="file-upload__estado" id="adjuntosEstado">Ningún archivo seleccionado</span>
+              </div>
+              <p class="field__note">Máximo 5 archivos, 10 MB cada uno.</p>
+              <ul class="adjuntos-lista" id="adjuntosLista"></ul>
+            </div>
+          </fieldset>
+
+          <div class="form__actions">
+            <button type="submit" class="btn btn--primary" id="btn-enviar">Crear solicitud</button>
+            <button type="reset" class="btn btn--ghost" id="btn-limpiar">Limpiar campos</button>
+          </div>
+          <p class="form__error" id="error-nuevo" hidden></p>
+          <p class="form__progreso" id="progreso-nuevo" hidden></p>
+        </form>
+      </div>
+
+      <div class="card card--form" id="confirmacion" hidden>
+        <p class="card__lead">Solicitud creada</p>
+        <p class="card__hint">Guarda este número: lo necesitas para consultar el estado más adelante.</p>
+        <div class="stamp stamp--solo">
+          <div class="stamp__id" id="confirmacion-ticket">DISF000000</div>
+          <div class="stamp__label">Número de ticket</div>
+        </div>
+        <p class="form__error" id="error-adjuntos" hidden></p>
+        <div class="form__actions">
+          <button type="button" class="btn btn--primary" id="btn-ver-estado">Ver estado</button>
+          <button type="button" class="btn btn--ghost" id="btn-crear-otra">Crear otra</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- Vista: consultar estado -->
+    <section class="view" data-view="consultar">
+      <div class="card">
+        <p class="card__lead">¿Cómo va tu solicitud?</p>
+        <p class="card__hint">Ingresa el número de ticket que recibiste al crearla, por ejemplo DISF123456.</p>
+
+        <form id="form-consultar" novalidate>
+          <div class="search-row">
+            <input type="text" id="idConsulta" name="idConsulta" placeholder="DISF123456" autocomplete="off">
+            <button type="submit" class="btn btn--primary" id="btn-buscar">Buscar estado</button>
+          </div>
+          <p class="form__error" id="error-consultar" hidden></p>
+        </form>
+      </div>
+
+      <div class="card" id="resultado" hidden></div>
+    </section>
+
+  </div>
+
+  <?!= include('JavaScript'); ?>
+</body>
+</html>

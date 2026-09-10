@@ -1,0 +1,15 @@
+{
+  "name": "frozz-designs",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Apps Script project synced via clasp",
+  "scripts": {
+    "push": "clasp push",
+    "push:force": "clasp push --force",
+    "watch": "clasp push --watch",
+    "pull": "clasp pull",
+    "deploy": "npm run push:force && clasp deploy -i AKfycbxRorjqmBn2Z3uz_Qy06UIqDQeES3KxKS01iGHya4m1GIDgyafTxUt5kmtO6Knh76nL",
+    "logs": "clasp tail-logs",
+    "open": "clasp open-script"
+  }
+}

@@ -1,0 +1,331 @@
+<script>
+(function () {
+  'use strict';
+
+  var ctxEl = document.getElementById('ctx');
+  var ctx = { t: ctxEl.getAttribute('data-t'), id: ctxEl.getAttribute('data-id'), s: ctxEl.getAttribute('data-s') };
+
+  // ---- Tema claro / oscuro (mismo patrón que Index) ----
+
+  var mediaOscuro = window.matchMedia('(prefers-color-scheme: dark)');
+  var btnTema = document.getElementById('theme-toggle');
+
+  function leerTemaGuardado() { try { return localStorage.getItem('frozz-theme'); } catch (e) { return null; } }
+  function guardarTema(t) { try { localStorage.setItem('frozz-theme', t); } catch (e) { /* almacenamiento no disponible */ } }
+  function temaDelSistema() { return mediaOscuro.matches ? 'dark' : 'light'; }
+
+  function aplicarTema(t) {
+    document.documentElement.setAttribute('data-theme', t);
+    btnTema.classList.toggle('is-dark', t === 'dark');
+    btnTema.setAttribute('aria-label', t === 'dark' ? 'Cambiar a tema claro' : 'Cambiar a tema oscuro');
+  }
+
+  aplicarTema(leerTemaGuardado() || temaDelSistema());
+  mediaOscuro.addEventListener('change', function () { if (!leerTemaGuardado()) aplicarTema(temaDelSistema()); });
+  btnTema.addEventListener('click', function () {
+    var siguiente = document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+    aplicarTema(siguiente);
+    guardarTema(siguiente);
+  });
+
+  // ---- Helpers ----
+
+  function esc(texto) {
+    return String(texto == null ? '' : texto).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  }
+
+  function formatearFecha(fechaIso) {
+    if (!fechaIso) return '—';
+    var partes = fechaIso.split('-');
+    return new Date(Number(partes[0]), Number(partes[1]) - 1, Number(partes[2]))
+      .toLocaleDateString('es-CO', { day: 'numeric', month: 'short', year: 'numeric' });
+  }
+
+  function runAsync(nombreFuncion) {
+    var args = Array.prototype.slice.call(arguments, 1);
+    return new Promise(function (resolve, reject) {
+      google.script.run
+        .withSuccessHandler(resolve)
+        .withFailureHandler(reject)[nombreFuncion].apply(null, args);
+    });
+  }
+
+  var elError = document.getElementById('gError');
+  function mostrarError(msg) { elError.textContent = msg; elError.hidden = false; }
+  function ocultarError() { elError.hidden = true; elError.textContent = ''; }
+
+  function conBoton(boton, promesa) {
+    boton.disabled = true;
+    boton.classList.add('is-loading');
+    return promesa.then(function (res) {
+      boton.disabled = false;
+      boton.classList.remove('is-loading');
+      return res;
+    }, function (err) {
+      boton.disabled = false;
+      boton.classList.remove('is-loading');
+      throw err;
+    });
+  }
+
+  function iniciarApp() {
+    cargar(true);
+  }
+
+  // ---- Stepper ----
+
+  function renderStepper(etapaActual, etapas, rechazada, finalizada) {
+    var idxActual = etapas.indexOf(etapaActual);
+    if (idxActual === -1) idxActual = 0;
+    var esFinal = etapaActual === etapas[etapas.length - 1] && finalizada;
+    var nodos = '';
+    var labels = '';
+
+    etapas.forEach(function (etapa, i) {
+      var esActual = i === idxActual;
+      var claseNodo = 'pipeline__node';
+      var claseLabel = '';
+
+      if (rechazada) {
+        if (i < idxActual) claseNodo += ' is-reached';
+        else if (esActual) { claseNodo += ' is-rejected'; claseLabel = 'is-rejected'; }
+        else { claseNodo += ' is-ended'; claseLabel = 'is-ended'; }
+      } else {
+        if (i < idxActual) claseNodo += ' is-reached';
+        if (esActual) { claseNodo += esFinal ? ' is-final' : ' is-current'; claseLabel = esFinal ? 'is-final' : 'is-current'; }
+      }
+
+      nodos += '<div class="' + claseNodo + '"></div>';
+      if (i < etapas.length - 1) {
+        var claseSeg = 'pipeline__seg' + (i < idxActual ? ' is-filled' : '');
+        nodos += '<div class="' + claseSeg + '"><span></span></div>';
+      }
+      labels += '<span class="' + claseLabel + '">' + esc(etapa) + '</span>';
+    });
+
+    return '<div class="pipeline"><div class="pipeline__track">' + nodos + '</div><div class="pipeline__labels">' + labels + '</div></div>';
+  }
+
+  // ---- Notas ----
+
+  function renderNotas(texto) {
+    var cont = document.getElementById('notasTimeline');
+    if (!texto) {
+      cont.innerHTML = '<li class="nota-vacia">Sin notas todavía</li>';
+      return;
+    }
+    var lineas = texto.split('\n').filter(function (l) { return l.trim(); });
+    cont.innerHTML = lineas.map(function (l) { return '<li>' + esc(l) + '</li>'; }).join('');
+  }
+
+  // ---- Render principal ----
+
+  var personalCache = [];
+
+  function poblarResponsables() {
+    var sel = document.getElementById('selResponsable');
+    sel.innerHTML = '<option value="">Selecciona una opción</option>' +
+      personalCache.map(function (p) { return '<option value="' + esc(p.id) + '">' + esc(p.nombre) + '</option>'; }).join('');
+  }
+
+  function render(s) {
+    document.getElementById('gTitulo').textContent = s.nombreProyecto;
+    document.getElementById('gTicket').textContent = s.ticket + ' · ' + s.estado;
+    document.getElementById('gPrioridad').textContent = s.prioridad || '—';
+    document.getElementById('gSolicitante').textContent = s.solicitanteNombre || '—';
+    document.getElementById('gCliente').textContent = s.clienteNombre || '—';
+    document.getElementById('gTipo').textContent = s.tipo;
+    document.getElementById('gClasificacion').textContent = (s.clasificacion || []).join(', ') || '—';
+
+    var elOrdenTrabajoItem = document.getElementById('gOrdenTrabajoItem');
+    if (s.ordenTrabajo) {
+      document.getElementById('gOrdenTrabajo').textContent = s.ordenTrabajo;
+      elOrdenTrabajoItem.hidden = false;
+    } else {
+      elOrdenTrabajoItem.hidden = true;
+    }
+
+    document.getElementById('gRecibido').textContent = formatearFecha(s.fechaRecibido);
+    document.getElementById('gLimite').textContent = formatearFecha(s.fechaLimite);
+    document.getElementById('gDescripcion').textContent = s.descripcion;
+
+    var linkDocs = document.getElementById('gLinkDocs');
+    if (s.documentosSoporte) {
+      linkDocs.href = s.documentosSoporte;
+      linkDocs.hidden = false;
+    } else {
+      linkDocs.hidden = true;
+    }
+
+    var rechazada = s.aprobacion === 'RECHAZADO';
+    var etapaFinal = s.etapa === s.etapas[s.etapas.length - 1];
+    var finalizada = etapaFinal && s.estado === 'Listo';
+    document.getElementById('gStepper').innerHTML = renderStepper(s.etapa, s.etapas, rechazada, finalizada);
+    renderNotas(s.notas);
+
+    var elCierre = document.getElementById('gCierre');
+    if (rechazada || finalizada) {
+      elCierre.hidden = false;
+      elCierre.classList.remove('status-note--success', 'status-note--danger');
+      elCierre.classList.add(rechazada ? 'status-note--danger' : 'status-note--success');
+      document.getElementById('gCierreLabel').textContent = rechazada ? 'Solicitud rechazada' : 'Solicitud finalizada';
+    } else {
+      elCierre.hidden = true;
+    }
+
+    ['gAccionInicio', 'gAccionRevision', 'gAccionAprobacion', 'gAccionDesarrollo', 'gAccionFinalizada'].forEach(function (id) {
+      document.getElementById(id).hidden = true;
+    });
+    document.getElementById('gComentarioDecision').hidden = true;
+
+    document.getElementById('gCardNotas').hidden = s.estado === 'Sin empezar';
+
+    if (s.estado === 'Sin empezar') {
+      document.getElementById('gAccionInicio').hidden = false;
+      return;
+    }
+
+    if (rechazada) return;
+
+    if (s.etapa === s.etapas[0]) {
+      document.getElementById('gAccionRevision').hidden = false;
+      document.getElementById('btnGuardarRevision').textContent = 'Ir a la etapa ' + s.etapas[1];
+      poblarResponsables();
+      var sel = document.getElementById('selResponsable');
+      if (s.responsableId) sel.value = s.responsableId;
+      if (s.prioridad) document.getElementById('selPrioridad').value = s.prioridad;
+    } else if (s.etapa === s.etapas[1]) {
+      document.getElementById('gAccionAprobacion').hidden = false;
+    } else if (s.etapa === s.etapas[2]) {
+      document.getElementById('gAccionDesarrollo').hidden = false;
+      document.getElementById('btnAvanzarDesarrollo').textContent = 'Ir a la etapa ' + s.etapas[3];
+    } else if (etapaFinal && !finalizada) {
+      document.getElementById('gAccionFinalizada').hidden = false;
+    }
+  }
+
+  var elCargando = document.getElementById('gCargando');
+  var elContenido = document.getElementById('gContenido');
+
+  function cargar(esPrimeraCarga) {
+    ocultarError();
+    if (esPrimeraCarga) {
+      elCargando.hidden = false;
+      elContenido.hidden = true;
+    }
+    runAsync('gestionCargar', ctx).then(function (res) {
+      if (esPrimeraCarga) { elCargando.hidden = true; elContenido.hidden = false; }
+      if (!res.ok) { mostrarError(res.error); return; }
+      personalCache = res.personal;
+      render(res.solicitud);
+    }).catch(function () {
+      if (esPrimeraCarga) { elCargando.hidden = true; elContenido.hidden = false; }
+      mostrarError('Ocurrió un error inesperado. Recarga la página.');
+    });
+  }
+
+  // ---- Acciones ----
+
+  document.getElementById('btnIniciarGestion').addEventListener('click', function (evt) {
+    ocultarError();
+    conBoton(evt.target, runAsync('gestionIniciar', ctx)).then(function (res) {
+      if (!res.ok) { mostrarError(res.error); return; }
+      cargar();
+    }).catch(function () { mostrarError('Ocurrió un error inesperado.'); });
+  });
+
+  document.getElementById('btnGuardarRevision').addEventListener('click', function (evt) {
+    ocultarError();
+    var responsableId = document.getElementById('selResponsable').value;
+    var prioridad = document.getElementById('selPrioridad').value;
+    if (!responsableId) { mostrarError('Selecciona un responsable.'); return; }
+    if (!prioridad) { mostrarError('Selecciona la prioridad.'); return; }
+    conBoton(evt.target, runAsync('gestionCompletarRevision', ctx, responsableId, prioridad)).then(function (res) {
+      if (!res.ok) { mostrarError(res.error); return; }
+      cargar();
+    }).catch(function () { mostrarError('Ocurrió un error inesperado.'); });
+  });
+
+  var decisionPendiente = null;
+
+  document.getElementById('btnAbrirAprobar').addEventListener('click', function () {
+    decisionPendiente = 'APROBADO';
+    document.getElementById('lblComentarioDecision').textContent = 'Comentario de aprobación';
+    document.getElementById('txtComentarioDecision').value = '';
+    document.getElementById('gComentarioDecision').hidden = false;
+  });
+
+  document.getElementById('btnAbrirRechazar').addEventListener('click', function () {
+    decisionPendiente = 'RECHAZADO';
+    document.getElementById('lblComentarioDecision').textContent = 'Motivo del rechazo';
+    document.getElementById('txtComentarioDecision').value = '';
+    document.getElementById('gComentarioDecision').hidden = false;
+  });
+
+  document.getElementById('btnCancelarDecision').addEventListener('click', function () {
+    decisionPendiente = null;
+    document.getElementById('gComentarioDecision').hidden = true;
+  });
+
+  document.getElementById('btnConfirmarDecision').addEventListener('click', function (evt) {
+    ocultarError();
+    var comentario = document.getElementById('txtComentarioDecision').value.trim();
+    if (!comentario) { mostrarError('Escribe un comentario.'); return; }
+    conBoton(evt.target, runAsync('gestionDecidir', ctx, decisionPendiente, comentario)).then(function (res) {
+      if (!res.ok) { mostrarError(res.error); return; }
+      cargar();
+    }).catch(function () { mostrarError('Ocurrió un error inesperado.'); });
+  });
+
+  document.getElementById('btnAvanzarDesarrollo').addEventListener('click', function (evt) {
+    ocultarError();
+    conBoton(evt.target, runAsync('gestionCompletarDesarrollo', ctx)).then(function (res) {
+      if (!res.ok) { mostrarError(res.error); return; }
+      cargar();
+    }).catch(function () { mostrarError('Ocurrió un error inesperado.'); });
+  });
+
+  var modalFinal = document.getElementById('modalConfirmarFinal');
+
+  document.getElementById('btnFinalizar').addEventListener('click', function () {
+    ocultarError();
+    modalFinal.hidden = false;
+  });
+
+  document.getElementById('btnModalFinalNo').addEventListener('click', function () {
+    modalFinal.hidden = true;
+  });
+
+  modalFinal.addEventListener('click', function (evt) {
+    if (evt.target === modalFinal) modalFinal.hidden = true;
+  });
+
+  document.getElementById('btnModalFinalSi').addEventListener('click', function (evt) {
+    ocultarError();
+    var comentario = document.getElementById('txtComentarioFinal').value.trim();
+    conBoton(evt.target, runAsync('gestionFinalizar', ctx, comentario)).then(function (res) {
+      modalFinal.hidden = true;
+      if (!res.ok) { mostrarError(res.error); return; }
+      cargar();
+    }).catch(function () {
+      modalFinal.hidden = true;
+      mostrarError('Ocurrió un error inesperado.');
+    });
+  });
+
+  document.getElementById('btnAgregarNota').addEventListener('click', function (evt) {
+    ocultarError();
+    var texto = document.getElementById('txtNuevaNota').value.trim();
+    if (!texto) return;
+    conBoton(evt.target, runAsync('gestionAgregarNota', ctx, texto)).then(function (res) {
+      if (!res.ok) { mostrarError(res.error); return; }
+      document.getElementById('txtNuevaNota').value = '';
+      cargar();
+    }).catch(function () { mostrarError('Ocurrió un error inesperado.'); });
+  });
+
+  iniciarApp();
+})();
+</script>

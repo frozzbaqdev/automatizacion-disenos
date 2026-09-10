@@ -1,0 +1,543 @@
+<script>
+(function () {
+  'use strict';
+
+  var MAX_ARCHIVOS = 5;
+  var MAX_BYTES_ARCHIVO = 10 * 1024 * 1024;
+  var CLASIFICACION_ORDEN_TRABAJO = 'Diseño ing de detalle';
+
+  var personalCache = [];
+  var clientesCache = [];
+
+  // ---- Tema claro / oscuro ----
+
+  var THEME_KEY = 'frozz-theme';
+  var mediaOscuro = window.matchMedia('(prefers-color-scheme: dark)');
+  var btnTema = document.getElementById('theme-toggle');
+
+  function leerTemaGuardado() {
+    try { return localStorage.getItem(THEME_KEY); } catch (e) { return null; }
+  }
+
+  function guardarTema(tema) {
+    try { localStorage.setItem(THEME_KEY, tema); } catch (e) { /* almacenamiento no disponible */ }
+  }
+
+  function temaDelSistema() {
+    return mediaOscuro.matches ? 'dark' : 'light';
+  }
+
+  function aplicarTema(tema) {
+    document.documentElement.setAttribute('data-theme', tema);
+    btnTema.classList.toggle('is-dark', tema === 'dark');
+    btnTema.setAttribute('aria-label', tema === 'dark' ? 'Cambiar a tema claro' : 'Cambiar a tema oscuro');
+  }
+
+  aplicarTema(leerTemaGuardado() || temaDelSistema());
+
+  mediaOscuro.addEventListener('change', function () {
+    if (!leerTemaGuardado()) aplicarTema(temaDelSistema());
+  });
+
+  btnTema.addEventListener('click', function () {
+    var siguiente = document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+
+    var estilo = document.createElement('style');
+    estilo.textContent = '*,*::before,*::after{transition:none !important;}';
+    document.head.appendChild(estilo);
+
+    aplicarTema(siguiente);
+    guardarTema(siguiente);
+
+    window.getComputedStyle(estilo).opacity;
+    requestAnimationFrame(function () {
+      document.head.removeChild(estilo);
+    });
+  });
+
+  // ---- Tabs ----
+
+  var tabs = document.querySelectorAll('.tab');
+  var views = document.querySelectorAll('.view');
+
+  function irATab(nombre) {
+    tabs.forEach(function (t) { t.setAttribute('aria-selected', String(t.getAttribute('data-view') === nombre)); });
+    views.forEach(function (v) { v.classList.toggle('is-active', v.getAttribute('data-view') === nombre); });
+  }
+
+  tabs.forEach(function (tab) {
+    tab.addEventListener('click', function () { irATab(tab.getAttribute('data-view')); });
+  });
+
+  // ---- Helpers ----
+
+  function esc(texto) {
+    return String(texto == null ? '' : texto).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  }
+
+  function formatearFecha(fechaIso) {
+    if (!fechaIso) return '—';
+    var partes = fechaIso.split('-');
+    var fecha = new Date(Number(partes[0]), Number(partes[1]) - 1, Number(partes[2]));
+    return fecha.toLocaleDateString('es-CO', { day: 'numeric', month: 'short', year: 'numeric' });
+  }
+
+  function mostrarError(el, mensaje) {
+    el.textContent = mensaje;
+    el.hidden = false;
+  }
+
+  function ocultarError(el) {
+    el.hidden = true;
+    el.textContent = '';
+  }
+
+  function fileABase64(file) {
+    return new Promise(function (resolve, reject) {
+      var lector = new FileReader();
+      lector.onload = function () {
+        var resultado = lector.result;
+        resolve(String(resultado).split(',')[1] || '');
+      };
+      lector.onerror = function () { reject(new Error('No se pudo leer el archivo ' + file.name)); };
+      lector.readAsDataURL(file);
+    });
+  }
+
+  function runAsync(nombreFuncion) {
+    var args = Array.prototype.slice.call(arguments, 1);
+    return new Promise(function (resolve, reject) {
+      google.script.run
+        .withSuccessHandler(resolve)
+        .withFailureHandler(reject)[nombreFuncion].apply(null, args);
+    });
+  }
+
+  // ---- Catálogos (solicitante + cliente) ----
+
+  var selectSolicitante = document.getElementById('solicitanteId');
+  var campoCorreoManual = document.getElementById('campoCorreoManual');
+  var inputCorreoManual = document.getElementById('correoManual');
+  var inputCliente = document.getElementById('clienteInput');
+  var hiddenClienteId = document.getElementById('clienteId');
+  var listaCliente = document.getElementById('clienteLista');
+  var selectClasificacion = document.getElementById('clasificacion');
+  var campoOrdenTrabajo = document.getElementById('campoOrdenTrabajo');
+  var selectOrdenTrabajo = document.getElementById('ordenTrabajo');
+
+  function poblarSolicitantes(personal) {
+    personalCache = personal;
+    selectSolicitante.innerHTML = '<option value="" disabled selected>Selecciona una opción</option>' +
+      personal.map(function (p) { return '<option value="' + esc(p.id) + '">' + esc(p.nombre) + '</option>'; }).join('');
+    selectSolicitante.disabled = false;
+  }
+
+  selectSolicitante.addEventListener('change', function () {
+    var empleado = personalCache.filter(function (p) { return p.id === selectSolicitante.value; })[0];
+    var tieneCorreo = !!(empleado && empleado.correo);
+    campoCorreoManual.hidden = tieneCorreo;
+    if (tieneCorreo) inputCorreoManual.value = '';
+  });
+
+  function habilitarCliente() {
+    inputCliente.disabled = false;
+    inputCliente.placeholder = 'Escribe para buscar un cliente…';
+  }
+
+  function renderListaCliente(items) {
+    if (!items.length) {
+      listaCliente.innerHTML = '<div class="combo__vacio">Sin resultados</div>';
+      listaCliente.hidden = false;
+      return;
+    }
+    listaCliente.innerHTML = items.slice(0, 40).map(function (c) {
+      return '<div class="combo__item" data-id="' + esc(c.id) + '" data-nombre="' + esc(c.nombre) + '">' + esc(c.nombre) + '</div>';
+    }).join('');
+    listaCliente.hidden = false;
+  }
+
+  inputCliente.addEventListener('input', function () {
+    hiddenClienteId.value = '';
+    if (ordenTrabajoRequerida()) cargarOrdenesTrabajoUI();
+    var consulta = inputCliente.value.trim().toLowerCase();
+    if (!consulta) { listaCliente.hidden = true; return; }
+    var filtrados = clientesCache.filter(function (c) { return c.nombre.toLowerCase().indexOf(consulta) !== -1; });
+    renderListaCliente(filtrados);
+  });
+
+  inputCliente.addEventListener('focus', function () {
+    if (inputCliente.value.trim() && !hiddenClienteId.value) {
+      inputCliente.dispatchEvent(new Event('input'));
+    }
+  });
+
+  listaCliente.addEventListener('mousedown', function (evt) {
+    var item = evt.target.closest('.combo__item');
+    if (!item) return;
+    inputCliente.value = item.getAttribute('data-nombre');
+    hiddenClienteId.value = item.getAttribute('data-id');
+    listaCliente.hidden = true;
+    if (ordenTrabajoRequerida()) cargarOrdenesTrabajoUI();
+  });
+
+  document.addEventListener('click', function (evt) {
+    if (!evt.target.closest('#clienteCombo')) listaCliente.hidden = true;
+  });
+
+  // ---- Orden de trabajo (condicional a la clasificación "Diseño ing de detalle") ----
+
+  function ordenTrabajoRequerida() {
+    return selectClasificacion.value === CLASIFICACION_ORDEN_TRABAJO;
+  }
+
+  function poblarOrdenesTrabajo(ordenes) {
+    selectOrdenTrabajo.innerHTML = ordenes.length
+      ? '<option value="" disabled selected>Selecciona una opción</option>' +
+        ordenes.map(function (o) { return '<option value="' + esc(o.id) + '">' + esc(o.nombre) + '</option>'; }).join('')
+      : '<option value="" selected>Este cliente no tiene órdenes de trabajo</option>';
+    selectOrdenTrabajo.disabled = !ordenes.length;
+  }
+
+  function cargarOrdenesTrabajoUI() {
+    if (!hiddenClienteId.value) {
+      selectOrdenTrabajo.innerHTML = '<option value="" selected>Selecciona un cliente primero</option>';
+      selectOrdenTrabajo.disabled = true;
+      return;
+    }
+    selectOrdenTrabajo.innerHTML = '<option value="" selected>Cargando órdenes…</option>';
+    selectOrdenTrabajo.disabled = true;
+    runAsync('cargarOrdenesTrabajo', hiddenClienteId.value).then(function (res) {
+      if (!res.ok) throw new Error(res.error);
+      poblarOrdenesTrabajo(res.ordenes);
+    }).catch(function () {
+      selectOrdenTrabajo.innerHTML = '<option value="" selected>No se pudieron cargar. Intenta de nuevo.</option>';
+    });
+  }
+
+  selectClasificacion.addEventListener('change', function () {
+    campoOrdenTrabajo.hidden = !ordenTrabajoRequerida();
+    if (ordenTrabajoRequerida()) cargarOrdenesTrabajoUI();
+  });
+
+  function cargarCatalogosUI() {
+    runAsync('cargarCatalogos').then(function (res) {
+      if (!res.ok) throw new Error(res.error);
+      poblarSolicitantes(res.personal);
+      clientesCache = res.clientes;
+      habilitarCliente();
+    }).catch(function () {
+      selectSolicitante.innerHTML = '<option value="" selected>No se pudo cargar. Recarga la página.</option>';
+      inputCliente.placeholder = 'No se pudo cargar. Recarga la página.';
+    });
+  }
+
+  cargarCatalogosUI();
+
+  // ---- Adjuntos ----
+
+  var inputAdjuntos = document.getElementById('adjuntos');
+  var estadoAdjuntos = document.getElementById('adjuntosEstado');
+  var listaAdjuntos = document.getElementById('adjuntosLista');
+  var errorAdjuntos = document.getElementById('error-nuevo');
+
+  function tamanoLegible(bytes) {
+    if (bytes < 1024 * 1024) return Math.round(bytes / 1024) + ' KB';
+    return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+  }
+
+  function quitarArchivo(indice) {
+    var dt = new DataTransfer();
+    Array.prototype.forEach.call(inputAdjuntos.files, function (f, i) {
+      if (i !== indice) dt.items.add(f);
+    });
+    inputAdjuntos.files = dt.files;
+    renderAdjuntos();
+  }
+
+  function renderAdjuntos() {
+    var archivos = Array.prototype.slice.call(inputAdjuntos.files);
+    estadoAdjuntos.textContent = archivos.length
+      ? (archivos.length === 1 ? '1 archivo seleccionado' : archivos.length + ' archivos seleccionados')
+      : 'Ningún archivo seleccionado';
+    listaAdjuntos.innerHTML = archivos.map(function (f, i) {
+      return '<li><span class="adjunto-nombre">' + esc(f.name) + ' · ' + tamanoLegible(f.size) + '</span>' +
+        '<button type="button" class="adjunto-quitar" data-i="' + i + '">Quitar</button></li>';
+    }).join('');
+  }
+
+  listaAdjuntos.addEventListener('click', function (evt) {
+    if (evt.target.classList.contains('adjunto-quitar')) {
+      quitarArchivo(Number(evt.target.getAttribute('data-i')));
+    }
+  });
+
+  inputAdjuntos.addEventListener('change', function () {
+    ocultarError(errorAdjuntos);
+    var archivos = Array.prototype.slice.call(inputAdjuntos.files);
+    if (archivos.length > MAX_ARCHIVOS) {
+      mostrarError(errorAdjuntos, 'Puedes adjuntar máximo ' + MAX_ARCHIVOS + ' archivos.');
+      var dt = new DataTransfer();
+      archivos.slice(0, MAX_ARCHIVOS).forEach(function (f) { dt.items.add(f); });
+      inputAdjuntos.files = dt.files;
+    }
+    var grandes = Array.prototype.filter.call(inputAdjuntos.files, function (f) { return f.size > MAX_BYTES_ARCHIVO; });
+    if (grandes.length) {
+      mostrarError(errorAdjuntos, 'Estos archivos superan 10 MB y no se subirán: ' + grandes.map(function (f) { return f.name; }).join(', '));
+    }
+    renderAdjuntos();
+  });
+
+  // ---- Nueva solicitud ----
+
+  var formNuevo = document.getElementById('form-nuevo');
+  var btnEnviar = document.getElementById('btn-enviar');
+  var errorNuevo = document.getElementById('error-nuevo');
+  var progresoNuevo = document.getElementById('progreso-nuevo');
+  var confirmacion = document.getElementById('confirmacion');
+  var errorAdjuntosConf = document.getElementById('error-adjuntos');
+
+  formNuevo.addEventListener('reset', function () {
+    ocultarError(errorNuevo);
+    listaAdjuntos.innerHTML = '';
+    estadoAdjuntos.textContent = 'Ningún archivo seleccionado';
+    campoCorreoManual.hidden = true;
+    campoOrdenTrabajo.hidden = true;
+    selectOrdenTrabajo.innerHTML = '<option value="" selected>Selecciona un cliente primero</option>';
+    selectOrdenTrabajo.disabled = true;
+  });
+
+  // Adjuntos en paralelo (hasta MAX_SUBIDAS_SIMULTANEAS a la vez) en vez de uno
+  // por uno: con varios archivos, el tiempo total de espera del cliente se
+  // reduce a casi 1/N en vez de la suma de todas las subidas.
+  var MAX_SUBIDAS_SIMULTANEAS = 3;
+
+  function subirAdjuntos(carpetaId, pageId, archivos) {
+    if (!archivos.length) return Promise.resolve();
+    var fallidos = [];
+    var completados = 0;
+    var siguienteIndice = 0;
+
+    progresoNuevo.hidden = false;
+    progresoNuevo.textContent = 'Subiendo adjuntos… (0/' + archivos.length + ')';
+
+    function subirUno(archivo) {
+      return fileABase64(archivo)
+        .then(function (base64) { return runAsync('subirArchivoSolicitud', carpetaId, archivo.name, archivo.type, base64); })
+        .then(function (res) { if (!res.ok) fallidos.push(archivo.name); })
+        .catch(function () { fallidos.push(archivo.name); })
+        .then(function () {
+          completados++;
+          progresoNuevo.textContent = 'Subiendo adjuntos… (' + completados + '/' + archivos.length + ')';
+        });
+    }
+
+    function trabajador() {
+      if (siguienteIndice >= archivos.length) return Promise.resolve();
+      var archivo = archivos[siguienteIndice++];
+      return subirUno(archivo).then(trabajador);
+    }
+
+    var trabajadores = [];
+    for (var i = 0; i < Math.min(MAX_SUBIDAS_SIMULTANEAS, archivos.length); i++) {
+      trabajadores.push(trabajador());
+    }
+
+    return Promise.all(trabajadores).then(function () {
+      if (fallidos.length) {
+        return runAsync('registrarAdjuntosFallidos', pageId, fallidos).then(function () {
+          errorAdjuntosConf.hidden = false;
+          errorAdjuntosConf.textContent = fallidos.length + ' de ' + archivos.length + ' archivo(s) no se pudieron adjuntar. El equipo de diseño fue notificado.';
+        });
+      }
+    });
+  }
+
+  formNuevo.addEventListener('submit', function (evt) {
+    evt.preventDefault();
+    ocultarError(errorNuevo);
+
+    var archivosValidos = Array.prototype.filter.call(inputAdjuntos.files, function (f) { return f.size <= MAX_BYTES_ARCHIVO; });
+
+    var datos = {
+      solicitanteId: selectSolicitante.value,
+      correoSolicitante: inputCorreoManual.value,
+      clienteId: hiddenClienteId.value,
+      nombreProyecto: formNuevo.nombreProyecto.value,
+      tipo: formNuevo.tipo.value,
+      clasificacion: formNuevo.clasificacion.value,
+      fechaLimite: formNuevo.fechaLimite.value,
+      descripcion: formNuevo.descripcion.value,
+      ordenTrabajoId: ordenTrabajoRequerida() ? selectOrdenTrabajo.value : ''
+    };
+
+    if (inputCliente.value.trim() && !hiddenClienteId.value) {
+      mostrarError(errorNuevo, 'Selecciona un cliente de la lista.');
+      return;
+    }
+
+    if (ordenTrabajoRequerida() && !selectOrdenTrabajo.value) {
+      mostrarError(errorNuevo, 'Selecciona la orden de trabajo.');
+      return;
+    }
+
+    btnEnviar.disabled = true;
+    btnEnviar.classList.add('is-loading');
+    btnEnviar.textContent = 'Creando…';
+
+    google.script.run
+      .withSuccessHandler(function (res) {
+        if (!res.ok) {
+          btnEnviar.disabled = false;
+          btnEnviar.classList.remove('is-loading');
+          btnEnviar.textContent = 'Crear solicitud';
+          mostrarError(errorNuevo, res.error);
+          return;
+        }
+
+        document.getElementById('confirmacion-ticket').textContent = res.ticket;
+        errorAdjuntosConf.hidden = true;
+        formNuevo.hidden = true;
+        confirmacion.hidden = false;
+        confirmacion.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+
+        subirAdjuntos(res.carpetaId, res.pageId, archivosValidos).then(function () {
+          progresoNuevo.hidden = true;
+          btnEnviar.disabled = false;
+          btnEnviar.classList.remove('is-loading');
+          btnEnviar.textContent = 'Crear solicitud';
+        });
+      })
+      .withFailureHandler(function () {
+        btnEnviar.disabled = false;
+        btnEnviar.classList.remove('is-loading');
+        btnEnviar.textContent = 'Crear solicitud';
+        mostrarError(errorNuevo, 'Ocurrió un error inesperado. Intenta de nuevo.');
+      })
+      .crearSolicitud(datos);
+  });
+
+  document.getElementById('btn-ver-estado').addEventListener('click', function () {
+    var ticket = document.getElementById('confirmacion-ticket').textContent;
+    irATab('consultar');
+    document.getElementById('idConsulta').value = ticket;
+    formConsultar.dispatchEvent(new Event('submit', { cancelable: true }));
+  });
+
+  document.getElementById('btn-crear-otra').addEventListener('click', function () {
+    confirmacion.hidden = true;
+    formNuevo.hidden = false;
+    formNuevo.reset();
+    inputCliente.value = '';
+    hiddenClienteId.value = '';
+  });
+
+  // ---- Consultar estado ----
+
+  var formConsultar = document.getElementById('form-consultar');
+  var btnBuscar = document.getElementById('btn-buscar');
+  var errorConsultar = document.getElementById('error-consultar');
+  var resultado = document.getElementById('resultado');
+
+  function renderPipeline(etapaActual, etapas, rechazada, finalizada) {
+    var idxActual = etapas.indexOf(etapaActual);
+    if (idxActual === -1) idxActual = 0;
+    var esUltima = idxActual === etapas.length - 1 && finalizada;
+    var nodos = '';
+    var labels = '';
+
+    etapas.forEach(function (etapa, i) {
+      var esActual = i === idxActual;
+      var claseEstado = rechazada ? 'is-rejected' : (esUltima ? 'is-final' : 'is-current');
+
+      var claseNodo = 'pipeline__node';
+      if (i < idxActual) claseNodo += ' is-reached';
+      if (esActual) claseNodo += ' ' + claseEstado;
+      nodos += '<div class="' + claseNodo + '"></div>';
+
+      if (i < etapas.length - 1) {
+        var claseSeg = 'pipeline__seg' + (i < idxActual ? ' is-filled' : '');
+        nodos += '<div class="' + claseSeg + '"><span></span></div>';
+      }
+
+      labels += '<span class="' + (esActual ? claseEstado : '') + '">' + esc(etapa) + '</span>';
+    });
+
+    return (
+      '<div class="pipeline">' +
+        '<div class="pipeline__track">' + nodos + '</div>' +
+        '<div class="pipeline__labels">' + labels + '</div>' +
+      '</div>'
+    );
+  }
+
+  function renderChips(items) {
+    return items.map(function (i) { return '<span class="chip">' + esc(i) + '</span>'; }).join('');
+  }
+
+  function renderResultado(s) {
+    var rechazada = s.aprobacion === 'RECHAZADO';
+    var finalizada = !!s.finalizada;
+    var notaHtml = '';
+    if (rechazada || finalizada) {
+      notaHtml =
+        '<div class="status-note ' + (rechazada ? 'status-note--danger' : 'status-note--success') + '">' +
+          '<span class="status-note__dot"></span>' +
+          '<div>' +
+            '<p class="status-note__label">' + (rechazada ? 'Solicitud rechazada' : 'Solicitud finalizada') + '</p>' +
+            (s.nota ? '<p class="status-note__text">' + esc(s.nota) + '</p>' : '') +
+          '</div>' +
+        '</div>';
+    }
+
+    resultado.innerHTML =
+      '<div class="result__header">' +
+        '<p class="card__lead">' + esc(s.nombreProyecto) + '</p>' +
+      '</div>' +
+      '<div class="result__id">' + esc(s.ticket) + '</div>' +
+      renderPipeline(s.etapa, s.etapas, rechazada, finalizada) +
+      notaHtml +
+      '<dl class="details">' +
+        '<div class="details__item"><dt>Recibido</dt><dd>' + formatearFecha(s.fechaRecibido) + '</dd></div>' +
+        '<div class="details__item"><dt>' + (s.fechaEntrega ? 'Fecha de entrega' : 'Fecha límite') + '</dt><dd>' + formatearFecha(s.fechaEntrega || s.fechaLimite) + '</dd></div>' +
+        '<div class="details__item"><dt>Tipo</dt><dd>' + esc(s.tipo) + '</dd></div>' +
+        '<div class="details__item"><dt>Clasificación</dt><dd><div class="chips">' + renderChips(s.clasificacion) + '</div></dd></div>' +
+        '<div class="details__item span-2"><dt>Descripción</dt><dd>' + esc(s.descripcion) + '</dd></div>' +
+      '</dl>';
+
+    resultado.hidden = false;
+  }
+
+  formConsultar.addEventListener('submit', function (evt) {
+    evt.preventDefault();
+    ocultarError(errorConsultar);
+    resultado.hidden = true;
+
+    var idConsulta = document.getElementById('idConsulta').value;
+
+    btnBuscar.disabled = true;
+    btnBuscar.classList.add('is-loading');
+    btnBuscar.textContent = 'Buscando…';
+
+    google.script.run
+      .withSuccessHandler(function (res) {
+        btnBuscar.disabled = false;
+        btnBuscar.classList.remove('is-loading');
+        btnBuscar.textContent = 'Buscar estado';
+        if (!res.ok) {
+          mostrarError(errorConsultar, res.error);
+          return;
+        }
+        renderResultado(res.solicitud);
+      })
+      .withFailureHandler(function () {
+        btnBuscar.disabled = false;
+        btnBuscar.classList.remove('is-loading');
+        btnBuscar.textContent = 'Buscar estado';
+        mostrarError(errorConsultar, 'Ocurrió un error inesperado. Intenta de nuevo.');
+      })
+      .buscarSolicitud(idConsulta);
+  });
+})();
+</script>

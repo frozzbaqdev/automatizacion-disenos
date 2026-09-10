@@ -1,0 +1,6 @@
+node_modules/
+.clasprc.json
+*.json.tmp
+.env
+.playwright-mcp/
+.claude/scheduled_tasks.lock

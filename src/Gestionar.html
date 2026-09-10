@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+  <?!= include('Styles'); ?>
+  <?!= include('EstilosGestion'); ?>
+</head>
+<body>
+
+  <header class="hero">
+    <button type="button" class="theme-toggle" id="theme-toggle" aria-label="Cambiar a tema oscuro">
+      <svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
+        <circle cx="12" cy="12" r="4"></circle>
+        <path d="M12 2.5v2.4M12 19.1v2.4M4.2 4.2l1.7 1.7M18.1 18.1l1.7 1.7M2.5 12h2.4M19.1 12h2.4M4.2 19.8l1.7-1.7M18.1 5.9l1.7-1.7"></path>
+      </svg>
+      <svg class="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M20.5 13.4A8.5 8.5 0 1 1 10.6 3.5a6.6 6.6 0 0 0 9.9 9.9Z"></path>
+      </svg>
+    </button>
+    <div class="hero__inner">
+      <div class="hero__logo-plate">
+        <img class="hero__logo" src="<?!= include('Logo'); ?>" alt="Frozz Colombia">
+      </div>
+      <h1 class="hero__title">Gestionar solicitud de diseño</h1>
+    </div>
+  </header>
+
+  <div class="page" id="ctx" data-t="<?= ticket ?>" data-id="<?= pageId ?>" data-s="<?= firma ?>">
+
+    <div id="panelGestion">
+
+      <div class="ticket-loader" id="gCargando">
+        <span class="ticket-loader__spinner" aria-hidden="true"></span>
+        <p>Cargando información de la solicitud…</p>
+      </div>
+
+      <div id="gContenido" hidden>
+
+      <div class="card">
+        <div class="result__header">
+          <p class="card__lead" id="gTitulo">—</p>
+          <span class="badge" id="gPrioridad">—</span>
+        </div>
+        <div class="result__id" id="gTicket">—</div>
+        <div class="status-note" id="gCierre" hidden>
+          <span class="status-note__dot"></span>
+          <p class="status-note__label" id="gCierreLabel">—</p>
+        </div>
+        <dl class="details">
+          <div class="details__item"><dt>Solicitante</dt><dd id="gSolicitante">—</dd></div>
+          <div class="details__item"><dt>Cliente</dt><dd id="gCliente">—</dd></div>
+          <div class="details__item"><dt>Tipo</dt><dd id="gTipo">—</dd></div>
+          <div class="details__item"><dt>Clasificación</dt><dd id="gClasificacion">—</dd></div>
+          <div class="details__item" id="gOrdenTrabajoItem" hidden><dt>Orden de trabajo</dt><dd id="gOrdenTrabajo">—</dd></div>
+          <div class="details__item"><dt>Recibido</dt><dd id="gRecibido">—</dd></div>
+          <div class="details__item"><dt>Fecha límite</dt><dd id="gLimite">—</dd></div>
+          <div class="details__item span-2"><dt>Descripción</dt><dd id="gDescripcion">—</dd></div>
+        </dl>
+        <div class="form__actions">
+          <a class="btn btn--ghost" id="gLinkDocs" href="#" target="_blank" rel="noopener" hidden>Ver documentos de soporte</a>
+        </div>
+      </div>
+
+      <div class="card">
+        <p class="card__lead">Estado de la solicitud</p>
+        <div id="gStepper"></div>
+
+        <div id="gAccionInicio" hidden>
+          <div class="form__actions">
+            <button type="button" class="btn btn--primary" id="btnIniciarGestion">Iniciar gestión de solicitud</button>
+          </div>
+        </div>
+
+        <div id="gAccionRevision" hidden>
+          <fieldset class="group">
+            <legend>Asignar responsable</legend>
+            <div class="field">
+              <label for="selResponsable">Responsable</label>
+              <select id="selResponsable"><option value="">Selecciona una opción</option></select>
+            </div>
+            <div class="field">
+              <label for="selPrioridad">Prioridad</label>
+              <select id="selPrioridad">
+                <option value="" disabled selected>Selecciona una opción</option>
+                <option value="Baja">Baja</option>
+                <option value="Media">Media</option>
+                <option value="Alta">Alta</option>
+                <option value="Urgente">Urgente</option>
+              </select>
+            </div>
+          </fieldset>
+          <div class="form__actions">
+            <button type="button" class="btn btn--primary" id="btnGuardarRevision">Guardar y avanzar</button>
+          </div>
+        </div>
+
+        <div id="gAccionAprobacion" hidden>
+          <p class="card__lead pregunta-decision">¿Deseas aprobar o rechazar la solicitud?</p>
+          <div class="form__actions form__actions--row">
+            <button type="button" class="btn btn--success" id="btnAbrirAprobar">Aprobar</button>
+            <button type="button" class="btn btn--danger" id="btnAbrirRechazar">Rechazar</button>
+          </div>
+          <div id="gComentarioDecision" hidden>
+            <div class="field">
+              <label for="txtComentarioDecision" id="lblComentarioDecision">Comentario</label>
+              <textarea id="txtComentarioDecision" placeholder="Escribe el motivo..."></textarea>
+            </div>
+            <div class="form__actions">
+              <button type="button" class="btn btn--primary" id="btnConfirmarDecision">Confirmar</button>
+              <button type="button" class="btn btn--ghost" id="btnCancelarDecision">Cancelar</button>
+            </div>
+          </div>
+        </div>
+
+        <div id="gAccionDesarrollo" hidden>
+          <div class="form__actions">
+            <button type="button" class="btn btn--primary" id="btnAvanzarDesarrollo">Ir a la etapa</button>
+          </div>
+        </div>
+
+        <div id="gAccionFinalizada" hidden>
+          <div class="field">
+            <label for="txtComentarioFinal">Comentario de cierre (opcional)</label>
+            <textarea id="txtComentarioFinal" placeholder="Notas de cierre..."></textarea>
+          </div>
+          <div class="form__actions">
+            <button type="button" class="btn btn--success" id="btnFinalizar">Finalizar solicitud</button>
+          </div>
+        </div>
+
+        <p class="form__error" id="gError" hidden></p>
+      </div>
+
+      <div class="card" id="gCardNotas" hidden>
+        <p class="card__lead">Notas</p>
+        <div class="field">
+          <label for="txtNuevaNota">Agregar una nota</label>
+          <textarea id="txtNuevaNota" placeholder="Escribe una nota para el historial..."></textarea>
+        </div>
+        <div class="form__actions">
+          <button type="button" class="btn btn--ghost" id="btnAgregarNota">Agregar nota</button>
+        </div>
+        <ul class="notas-timeline" id="notasTimeline"></ul>
+      </div>
+
+      </div>
+
+    </div>
+
+    <div class="modal-overlay" id="modalConfirmarFinal" hidden>
+      <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modalConfirmarFinalTitulo">
+        <p class="modal__title" id="modalConfirmarFinalTitulo">¿Finalizar esta solicitud?</p>
+        <p class="modal__text">El ticket se marcará como cerrado. Confirma que deseas continuar.</p>
+        <div class="modal__actions">
+          <button type="button" class="btn btn--ghost" id="btnModalFinalNo">No</button>
+          <button type="button" class="btn btn--success" id="btnModalFinalSi">Sí, finalizar</button>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <?!= include('JavaScriptGestion'); ?>
+</body>
+</html>

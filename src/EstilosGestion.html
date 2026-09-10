@@ -1,0 +1,207 @@
+<style>
+  /* ---- Botones del panel: grandes, ancho completo y centrados ---- */
+
+  #panelGestion .btn {
+    width: 100%;
+    padding: 15px 20px;
+    font-size: 15.5px;
+    text-align: center;
+  }
+
+  #panelGestion .form__actions {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 12px;
+  }
+
+  /* Aprobar / Rechazar van uno al lado del otro y centrados, no apilados a lo ancho. */
+  #panelGestion .form__actions--row {
+    flex-direction: row;
+    justify-content: center;
+  }
+
+  #panelGestion .form__actions--row .btn {
+    width: auto;
+    min-width: 140px;
+  }
+
+  /* Separa visualmente el formulario de comentario de los botones
+     Aprobar/Rechazar que lo abren, para que no se sientan pegados. */
+  #gComentarioDecision {
+    margin-top: 22px;
+    padding-top: 22px;
+    border-top: 1px dashed var(--line-soft);
+  }
+
+  /* Espacio arriba de la línea temporal (separándola del título de la tarjeta)
+     y arriba de la pregunta de aprobar/rechazar (separándola de la línea temporal). */
+  #gStepper {
+    margin-top: 18px;
+  }
+
+  .pregunta-decision {
+    margin-top: 20px;
+    text-align: center;
+  }
+
+  /* ---- Loader de carga inicial del ticket ---- */
+
+  .ticket-loader {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 14px;
+    padding: 56px 20px;
+    color: var(--ink-soft);
+    font-size: 14px;
+    text-align: center;
+  }
+
+  .ticket-loader__spinner {
+    width: 30px;
+    height: 30px;
+    border: 3px solid var(--line);
+    border-top-color: var(--brand);
+    border-radius: 50%;
+    animation: girar-spinner 0.7s linear infinite;
+  }
+
+  /* ---- Botones de decisión (aprobar / rechazar / finalizar) ---- */
+
+  .btn--success {
+    background: var(--success-gradient);
+    color: #FFFFFF;
+    box-shadow: var(--success-shadow);
+  }
+
+  .btn--success:hover { filter: brightness(0.94); }
+
+  .btn--danger {
+    background: var(--danger-gradient);
+    color: #FFFFFF;
+    box-shadow: var(--danger-shadow);
+  }
+
+  .btn--danger:hover { filter: brightness(0.94); }
+
+  /* ---- Stepper: estado rechazado ---- */
+
+  .pipeline__node.is-rejected {
+    border-color: var(--danger);
+    background: var(--danger);
+    box-shadow: 0 0 0 4px color-mix(in srgb, var(--danger) 18%, transparent);
+  }
+
+  .pipeline__node.is-ended {
+    border-color: var(--line);
+    background: var(--panel);
+    opacity: 0.5;
+  }
+
+  .pipeline__labels span.is-rejected {
+    color: var(--danger);
+    font-weight: 600;
+  }
+
+  .pipeline__labels span.is-ended {
+    color: var(--ink-faint);
+    opacity: 0.6;
+  }
+
+  /* ---- Notas ---- */
+
+  .notas-timeline {
+    list-style: none;
+    margin: 18px 0 0;
+    padding: 16px 0 0;
+    border-top: 1px solid var(--line-soft);
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    max-height: 340px;
+    overflow-y: auto;
+  }
+
+  .notas-timeline li {
+    font-size: 13.5px;
+    line-height: 1.55;
+    color: var(--ink);
+    background: var(--paper-tint);
+    border-radius: var(--radius-field);
+    padding: 10px 14px;
+    white-space: pre-wrap;
+  }
+
+  .notas-timeline .nota-vacia {
+    color: var(--ink-faint);
+    font-size: 13px;
+    text-align: center;
+    background: none;
+  }
+
+  /* ---- Modal de confirmación ---- */
+
+  .modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(11, 32, 56, 0.55);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    z-index: 50;
+    animation: modal-fondo-in 180ms cubic-bezier(0.2, 0, 0, 1);
+  }
+
+  .modal {
+    width: 100%;
+    max-width: 380px;
+    background: var(--panel);
+    border: 1.5px solid var(--line);
+    border-radius: var(--radius-card);
+    box-shadow: var(--shadow-1), var(--shadow-2);
+    padding: 28px 26px;
+    text-align: center;
+    animation: modal-caja-in 220ms cubic-bezier(0.2, 0, 0, 1);
+  }
+
+  .modal__title {
+    font-family: var(--font-body);
+    font-weight: 700;
+    font-size: 18px;
+    letter-spacing: -0.01em;
+    margin: 0 0 8px;
+    color: var(--ink);
+  }
+
+  .modal__text {
+    font-size: 13.5px;
+    color: var(--ink-soft);
+    margin: 0 0 22px;
+  }
+
+  .modal__actions {
+    display: flex;
+    gap: 10px;
+    justify-content: center;
+  }
+
+  .modal__actions .btn {
+    width: auto;
+    min-width: 120px;
+  }
+
+  @keyframes modal-fondo-in {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+
+  @keyframes modal-caja-in {
+    from { opacity: 0; transform: scale(0.94) translateY(8px); }
+    to { opacity: 1; transform: scale(1) translateY(0); }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .modal-overlay, .modal { animation: none !important; }
+  }
+</style>
